@@ -3,7 +3,10 @@
 
 module Task1 where
 
-import Parser
+import Parser ( Parser, satisfy)
+import Data.Char (isDigit)
+
+import Control.Applicative
 
 -- | Parses natural number (including zero)
 --
@@ -20,8 +23,11 @@ import Parser
 -- >>> parse nat "123abc"
 -- Parsed 123 (Input 3 "abc")
 --
-nat :: Parser Integer
-nat = error "TODO: define nat"
+nat :: Parser Int
+nat = read <$> some digit
+
+digit :: Parser Char
+digit = satisfy isDigit
 
 -- | Parses integer number
 --
@@ -38,5 +44,14 @@ nat = error "TODO: define nat"
 -- >>> parse int "123abc"
 -- Parsed 123 (Input 3 "abc")
 --
-int :: Parser Integer
-int = error "TODO: define int"
+int :: Parser Int
+int = negateNat <|> nat
+
+
+-- todo: implement opt? 
+negateNat :: Parser Int
+negateNat = do
+    _ <- satisfy (== '-') 
+    n <- nat                
+    return (-n)            
+
