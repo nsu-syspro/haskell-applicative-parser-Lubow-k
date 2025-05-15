@@ -2,6 +2,7 @@
 -- The above pragma enables all warnings
 
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
+{-# LANGUAGE InstanceSigs #-}
 -- The above pragma temporarily disables warnings about Parser constructor and runParser not being used
 
 module Parser
@@ -14,6 +15,7 @@ module Parser
   , parse
   , parseMaybe
   , satisfy
+  , option
   , Error(..)
   , Position(..)
   , Parsed(..)
@@ -21,6 +23,9 @@ module Parser
   ) where
 
 import Control.Applicative
+
+import Data.List (nub)
+import Control.Monad (liftM, ap)
 
 -- | Value annotated with position of parsed input starting from 0
 data Position a = Position Int a
@@ -32,7 +37,7 @@ type Input = Position String
 -- | Parsing error
 data Error =
     Unexpected Char -- ^ Unexpected character
-  | EndOfInput      -- ^ Unexpected end of input
+  | EndOfInput      -- ^ Unexpected end of input 
  deriving (Show, Eq)
 
 -- | Parsing result of value of type @a@
@@ -46,23 +51,47 @@ newtype Parser a = Parser { runParser :: Input -> Parsed a }
 
 -- | Runs given 'Parser' on given input string
 parse :: Parser a -> String -> Parsed a
-parse = error "TODO: define parse"
+parse (Parser p) input = p (Position 0 input)
 
 -- | Runs given 'Parser' on given input string with erasure of @Parsed a@ to @Maybe a@
 parseMaybe :: Parser a -> String -> Maybe a
-parseMaybe = error "TODO: define parseMaybe"
+parseMaybe p input = 
+  case parse p input of
+    Parsed value _ -> Just value
+    Failed _ -> Nothing
 
 instance Functor Parser where
-  fmap = error "TODO: define fmap (Parser)"
+  fmap :: (a -> b) -> Parser a -> Parser b
+  fmap = liftM
 
 instance Applicative Parser where
-  pure = error "TODO: define pure (Parser)"
-  (<*>) = error " TODO: define <*> (Parser)"
+  pure :: a -> Parser a
+  pure value = Parser(Parsed value)
+  
+  (<*>) :: Parser (a -> b) -> Parser a -> Parser b
+  (<*>) = ap
+
+instance Monad Parser where 
+  (>>=) :: Parser a -> (a -> Parser b) -> Parser b
+  (Parser p) >>= f = Parser (\input -> 
+    case p input of
+      Parsed value rest -> runParser (f value) rest
+      Failed errors     -> Failed errors)
+
 
 instance Alternative Parser where
-  empty = error "TODO: define empty (Parser)"
+  empty :: Parser a
+  empty = Parser (\_ -> Failed [])
+
   -- Note: when both parsers fail, their errors are accumulated and *deduplicated* to simplify debugging
-  (<|>) = error " TODO: define <|> (Parser)"
+  (<|>) :: Parser a -> Parser a -> Parser a
+  (Parser p1) <|> (Parser p2) = Parser (\input ->
+    case p1 input of
+      Failed errors1 -> 
+        case p2 input of
+          Failed errors2 -> Failed (nub (errors1 ++ errors2))
+          res -> res
+      res -> res)
 
 -- | Parses single character satisfying given predicate
 --
@@ -78,4 +107,16 @@ instance Alternative Parser where
 -- Failed [Position 0 EndOfInput]
 --
 satisfy :: (Char -> Bool) -> Parser Char
-satisfy = error "TODO: define satisfy"
+satisfy predicate = Parser parseChar
+  where
+    parseChar :: Input -> Parsed Char
+    parseChar (Position pos (x:xs))
+      | predicate x = Parsed x (Position (pos + 1) xs) 
+      | otherwise   = Failed [Position pos (Unexpected x)]
+    parseChar (Position pos []) = Failed [Position pos EndOfInput]    
+
+
+option :: Monoid m => Parser m -> Parser m
+option (Parser p) = Parser $ \input -> case p input of
+  Failed _ -> Parsed mempty input
+  res      -> res    

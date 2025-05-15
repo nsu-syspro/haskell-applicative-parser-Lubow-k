@@ -3,9 +3,15 @@
 
 module Task3 where
 
-import Parser
-import Data.Char (toLower)
+import Parser ( Parser, Parsed(..), parse, satisfy, option)
+import Data.Char (toLower, isControl)
 import Data.List (intercalate)
+
+import ParserCombinators ( char, string, choice)
+import Control.Applicative ((<|>), many, some)
+
+import Task1 (digit)
+import Task2 (charToString)
 
 -- | JSON representation
 --
@@ -38,7 +44,106 @@ data JValue =
 -- Failed [PosError 0 (Unexpected '{'),PosError 1 (Unexpected '{')]
 --
 json :: Parser JValue
-json = error "TODO: define json"
+json = element
+
+element :: Parser JValue
+element = whiteSpace *> value <* whiteSpace
+
+value :: Parser JValue
+value = choice [parseObject, parseNull, parseBool, parseNumber, parseString, parseArray]
+
+parseNull :: Parser JValue
+parseNull = string "null" >> pure JNull
+
+parseBool :: Parser JValue
+parseBool = choice [string "true" >> pure (JBool True), string "false" >> pure (JBool False)]
+
+parseNumber :: Parser JValue
+parseNumber = do
+  s        <- option (string "-")
+  intPart  <- integerPart
+  fracPart <- option fraction
+  expPart  <- option expon
+
+  let numStr = s ++ intPart ++ fracPart ++ expPart
+  let n = read numStr :: Double
+  pure $ JNumber n
+
+integerPart :: Parser String
+integerPart = some digit
+
+fraction :: Parser String
+fraction = do
+  let dot = '.'
+  _  <- char dot
+  ds <- some digit
+  pure (dot : ds)
+
+expon :: Parser String
+expon = do
+  e  <- choice [char 'E', char 'e']
+  s  <- option sign
+  ds <- some digit
+  pure (e : s ++ ds)
+
+sign :: Parser String
+sign = choice [string "+", string "-"]
+
+parseString :: Parser JValue
+parseString = fmap JString pString
+
+pString :: Parser String
+pString = do
+  _ <- char '\"'
+  content <- many pChar
+  _ <- char '\"'
+  let res = concat content
+  pure res
+
+pChar :: Parser String
+pChar = charToString (satisfy isNormalChar) <|> pEscape
+
+isNormalChar :: Char -> Bool
+isNormalChar c = not (isControl c || c == '\"' || c == '\\')
+
+pEscape :: Parser String
+pEscape = do
+  start <- char '\\'
+  end   <- satisfy isEscapeChar
+  pure (start : [end])
+
+isEscapeChar :: Char -> Bool
+isEscapeChar c = c `elem` "\"/\\bfnrt"
+
+parseContainer :: Monoid a => Char -> Char -> Parser a -> (a -> JValue) -> Parser JValue
+parseContainer open close parser constructor = do
+  _ <- char open
+  values <- option parser <* whiteSpace
+  _ <- char close
+  return $ constructor values
+
+parseContent :: Parser a -> Parser [a]
+parseContent parser = do
+  e  <- parser
+  es <- option (char ',' *> parseContent parser)
+  return (e : es)
+
+parseArray :: Parser JValue
+parseArray = parseContainer '[' ']' (parseContent element) JArray
+
+parseObject :: Parser JValue
+parseObject = parseContainer '{' '}' (parseContent member) JObject
+
+member :: Parser (String, JValue)
+member = do
+  key <- whiteSpace *> pString <* whiteSpace
+  _   <- char ':'
+  val <- element
+  return (key, val)
+
+whiteSpace :: Parser String
+whiteSpace = many (choice (char <$> [' ', '\n', '\r', '\t']))
+
 
 -- * Rendering helpers
 
