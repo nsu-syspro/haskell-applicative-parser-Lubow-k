@@ -7,6 +7,8 @@ import Parser
 import ParserCombinators ( char, string, spaces, choice)
 import Task1
 import Control.Applicative ((<|>))
+import Data.Maybe (fromMaybe)
+import Data.List (elemIndex)
 
 -- | Date representation
 --
@@ -95,14 +97,14 @@ day :: Parser Day
 day = do
   dayStr <- dayChoice <|> decade '0' nonZeroDigit
   let d = read dayStr :: Int
-  return $ Day d
+  pure $ Day d
 
 
 usDay :: Parser Day
 usDay = do
   dayStr <- dayChoice <|> charToString nonZeroDigit
   let d = read dayStr :: Int
-  return $ Day d
+  pure $ Day d
 
 
 dayChoice :: Parser String
@@ -113,23 +115,16 @@ month :: Parser Month
 month = do
   monthStr <- choice [decade '0' nonZeroDigit, string "10", string "11", string "12"]
   let m = read monthStr :: Int
-  return $ Month m
+  pure $ Month m
 
+monthNames :: [String]
+monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 monthName :: Parser Month
-monthName = choice [
-            string "Jan" >> return (Month 1),
-            string "Feb" >> return (Month 2),
-            string "Mar" >> return (Month 3),
-            string "Apr" >> return (Month 4),
-            string "May" >> return (Month 5),
-            string "Jun" >> return (Month 6),
-            string "Jul" >> return (Month 7),
-            string "Aug" >> return (Month 8),
-            string "Sep" >> return (Month 9),
-            string "Oct" >> return (Month 10),
-            string "Nov" >> return (Month 11),
-            string "Dec" >> return (Month 12)]
+monthName = do
+  name <- choice (map string monthNames)
+  let index = fromMaybe 0 (elemIndex name monthNames) + 1
+  pure (Month index)
 
 year :: Parser Year
 year = Year <$> nat
@@ -147,4 +142,4 @@ decade :: Char -> Parser Char -> Parser String
 decade ch parser = do
   _ <- char ch
   d <- charToString parser
-  return (ch : d)
+  pure (ch : d)

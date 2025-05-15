@@ -15,6 +15,7 @@ module Parser
   , parse
   , parseMaybe
   , satisfy
+  , option
   , Error(..)
   , Position(..)
   , Parsed(..)
@@ -24,6 +25,7 @@ module Parser
 import Control.Applicative
 
 import Data.List (nub)
+import Control.Monad (liftM, ap)
 
 -- | Value annotated with position of parsed input starting from 0
 data Position a = Position Int a
@@ -35,8 +37,7 @@ type Input = Position String
 -- | Parsing error
 data Error =
     Unexpected Char -- ^ Unexpected character
-  | EndOfInput      -- ^ Unexpected end of input
-  | WrongNumber 
+  | EndOfInput      -- ^ Unexpected end of input 
  deriving (Show, Eq)
 
 -- | Parsing result of value of type @a@
@@ -61,23 +62,14 @@ parseMaybe p input =
 
 instance Functor Parser where
   fmap :: (a -> b) -> Parser a -> Parser b
-  fmap f (Parser p) = Parser (\input ->
-    case p input of
-      Parsed value end -> Parsed (f value) end
-      Failed errors -> Failed errors)
+  fmap = liftM
 
 instance Applicative Parser where
   pure :: a -> Parser a
   pure value = Parser(Parsed value)
   
   (<*>) :: Parser (a -> b) -> Parser a -> Parser b
-  (Parser pf) <*> (Parser pa) = Parser (\input ->
-    case pf input of
-      Parsed f end -> 
-        case pa end of
-          Parsed value end' -> Parsed (f value) end'
-          Failed errors -> Failed errors
-      Failed errors -> Failed errors)
+  (<*>) = ap
 
 instance Monad Parser where 
   (>>=) :: Parser a -> (a -> Parser b) -> Parser b
@@ -121,4 +113,10 @@ satisfy predicate = Parser parseChar
     parseChar (Position pos (x:xs))
       | predicate x = Parsed x (Position (pos + 1) xs) 
       | otherwise   = Failed [Position pos (Unexpected x)]
-    parseChar (Position pos []) = Failed [Position pos EndOfInput]        
+    parseChar (Position pos []) = Failed [Position pos EndOfInput]    
+
+
+option :: Monoid m => Parser m -> Parser m
+option (Parser p) = Parser $ \input -> case p input of
+  Failed _ -> Parsed mempty input
+  res      -> res    

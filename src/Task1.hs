@@ -47,11 +47,9 @@ digit = satisfy isDigit
 int :: Parser Int
 int = negateNat <|> nat
 
-
--- todo: implement opt? 
 negateNat :: Parser Int
 negateNat = do
     _ <- satisfy (== '-') 
     n <- nat                
-    return (-n)            
+    pure (-n)            
 

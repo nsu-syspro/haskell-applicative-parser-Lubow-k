@@ -5,7 +5,8 @@ module ParserCombinators where
 
 import Parser ( Parser, satisfy )
 
-import Control.Applicative ( Alternative(empty, many, (<|>)) )
+import Control.Applicative ( Alternative(many), asum )
+import Control.Monad ( void )
 
 -- | Parses single character
 --
@@ -29,7 +30,7 @@ char ch = satisfy (== ch)
 -- Failed [Position 0 (Unexpected 'a')]
 --
 string :: String -> Parser String
-string = foldr (\c -> (<*>) ((:) <$> char c)) (pure "")
+string = traverse char
 
 -- | Skips zero or more space characters
 --
@@ -43,7 +44,7 @@ string = foldr (\c -> (<*>) ((:) <$> char c)) (pure "")
 -- Parsed "bar" (Position 3 "")
 --
 spaces :: Parser ()
-spaces = () <$ many (char ' ') 
+spaces = void (many (char ' '))
 
 -- | Tries to consecutively apply each of given list of parsers until one succeeds.
 -- Returns the *first* succeeding parser as result or 'empty' if all of them failed.
@@ -58,7 +59,7 @@ spaces = () <$ many (char ' ')
 -- Parsed "ba" (Position 2 "r")
 --
 choice :: (Foldable t, Alternative f) => t (f a) -> f a
-choice = foldr (<|>) empty
+choice = asum
 
 -- Discover and implement more useful parser combinators below
 --
